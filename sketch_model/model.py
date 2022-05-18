@@ -29,8 +29,7 @@ class SketchLayerClassifierModel(nn.Module):
     ):
         x, pos_embed = self.structure_embed(batch_img, batch_name, batch_bbox, batch_color, batch_class)
         x = self.transformer(x, None, pos_embed)
-        x = self.class_embed(x)
-        return x.log_softmax(dim=2)
+        return self.class_embed(x)
 
 
 def build(config: SketchModelConfig, tokenizer: PreTrainedTokenizer):

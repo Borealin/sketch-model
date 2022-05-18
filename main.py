@@ -1,4 +1,5 @@
 import datetime
+import json
 import math
 import random
 import sys
@@ -52,6 +53,7 @@ def main(config: SketchModelConfig):
                                  drop_last=False, collate_fn=utils.collate_fn, num_workers=config.num_workers)
 
     output_dir = Path(config.output_dir)
+    output_dir.mkdir(exist_ok=True)
     if config.resume:
         checkpoint = torch.load(config.resume, map_location='cpu')
         model.load_state_dict(checkpoint['model'])
@@ -59,11 +61,11 @@ def main(config: SketchModelConfig):
         lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
         config.start_epoch = checkpoint['epoch'] + 1
 
+    n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print('number of params:', n_parameters)
+
     if config.evaluate:
-        test_stats, coco_evaluator = evaluate(model, criterion,
-                                              data_loader_val, device)
-        if config.output_dir:
-            utils.save_on_master(coco_evaluator.coco_eval["bbox"].eval, output_dir / "eval.pth")
+        test_stats = evaluate(model, criterion, data_loader_val, device)
         return
 
     print("Start training")
@@ -75,8 +77,8 @@ def main(config: SketchModelConfig):
         lr_scheduler.step()
         if config.output_dir:
             checkpoint_paths = [output_dir / 'checkpoint.pth']
-            # extra checkpoint before LR drop and every 100 epochs
-            if (epoch + 1) % config.lr_drop == 0 or (epoch + 1) % 100 == 0:
+            # extra checkpoint before LR drop and every 10 epochs
+            if (epoch + 1) % config.lr_drop == 0 or (epoch + 1) % 10 == 0:
                 checkpoint_paths.append(output_dir / f'checkpoint{epoch:04}.pth')
             for checkpoint_path in checkpoint_paths:
                 utils.save_on_master({
@@ -86,7 +88,15 @@ def main(config: SketchModelConfig):
                     'epoch': epoch,
                     'config': config,
                 }, checkpoint_path)
+        test_stats = evaluate(model, criterion, data_loader_val, device)
+        log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
+                     **{f'test_{k}': v for k, v in test_stats.items()},
+                     'epoch': epoch,
+                     'n_parameters': n_parameters}
 
+        if config.output_dir and utils.is_main_process():
+            with (output_dir / "log.txt").open("a") as f:
+                f.write(json.dumps(log_stats) + "\n")
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     print('Training time {}'.format(total_time_str))
@@ -122,7 +132,7 @@ def train_one_epoch(
         outputs = model(batch_img, batch_name, batch_bbox, batch_color, batch_class)
         batch_ce_loss = torch.tensor(0.0, device=device)
         for i in range(len(targets)):
-            ce_loss = criterion(outputs[i], targets[i]["labels"])
+            ce_loss = criterion(outputs[i][:len(targets[i])], targets[i])
             batch_ce_loss += ce_loss
 
         if not math.isfinite(batch_ce_loss):
@@ -162,12 +172,12 @@ def evaluate(model, criterion, dataloader, device):
         batch_bbox = batch_bbox.to(device)
         batch_color = batch_color.to(device)
         batch_class = batch_class.to(device)
-        targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
+        targets = [t.to(device) for t in targets]
 
         outputs = model(batch_img, batch_name, batch_bbox, batch_color, batch_class)
         batch_ce_loss = torch.tensor(0.0, device=device)
         for i in range(len(targets)):
-            ce_loss = criterion(outputs[i], targets[i]["labels"])
+            ce_loss = criterion(outputs[i][:len(targets[i])], targets[i])
             batch_ce_loss += ce_loss
 
         metric_logger.update(loss=batch_ce_loss.detach())
