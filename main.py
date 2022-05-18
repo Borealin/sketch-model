@@ -12,7 +12,7 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from transformers import AutoTokenizer, PreTrainedTokenizer
 
-from sketch_model.configs import SketchModelConfig, get_config
+from sketch_model.configs import SketchModelConfig, config_from_arg
 from sketch_model.datasets import build_dataset
 from sketch_model.model import build
 from sketch_model.utils import misc as utils, accuracy, f1score
@@ -222,4 +222,4 @@ def evaluate(model, criterion, dataloader, device):
 
 
 if __name__ == '__main__':
-    main(get_config())
+    main(config_from_arg())
