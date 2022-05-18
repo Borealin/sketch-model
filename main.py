@@ -73,8 +73,8 @@ def main(config: SketchModelConfig):
     print("Start training")
     start_time = time.time()
     run_dir = output_dir / f'{time.strftime("%d-%H%M", time.localtime())}'
-    writer = SummaryWriter(str(run_dir))
     for epoch in range(config.start_epoch, config.epochs):
+        writer = SummaryWriter(str(run_dir))
         train_stats = train_one_epoch(config, model, criterion, data_loader_train, optimizer, device, epoch,
                                       config.clip_max_norm)
         lr_scheduler.step()
