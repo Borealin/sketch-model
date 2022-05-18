@@ -1,4 +1,4 @@
-from .config import SketchModelConfig
+from .config import *
 
 
 def get_config() -> SketchModelConfig:

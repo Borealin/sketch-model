@@ -11,7 +11,7 @@ import torch
 from torch.utils.data import DataLoader
 from transformers import AutoTokenizer, PreTrainedTokenizer
 
-from sketch_model.configs import SketchModelConfig
+from sketch_model.configs import SketchModelConfig, get_config
 from sketch_model.datasets import build_dataset
 from sketch_model.model import build
 from sketch_model.utils import misc as utils
@@ -78,7 +78,7 @@ def main(config: SketchModelConfig):
         if config.output_dir:
             checkpoint_paths = [output_dir / 'checkpoint.pth']
             # extra checkpoint before LR drop and every 10 epochs
-            if (epoch + 1) % config.lr_drop == 0 or (epoch + 1) % 10 == 0:
+            if (epoch + 1) % config.lr_drop == 0 or (epoch + 1) % 100 == 0:
                 checkpoint_paths.append(output_dir / f'checkpoint{epoch:04}.pth')
             for checkpoint_path in checkpoint_paths:
                 utils.save_on_master({
@@ -190,4 +190,4 @@ def evaluate(model, criterion, dataloader, device):
 
 
 if __name__ == '__main__':
-    main(SketchModelConfig())
+    main(get_config())

@@ -9,15 +9,20 @@ from sketch_model.utils import NestedTensor
 
 
 class SketchLayerClassifierModel(nn.Module):
-    def __init__(self, transformer, num_classes, tokenizer):
+    def __init__(
+            self,
+            config: SketchModelConfig,
+            transformer: SketchTransformer,
+            tokenizer: PreTrainedTokenizer,
+    ):
         super().__init__()
         self.transformer: SketchTransformer = transformer
         self.hidden_dim = transformer.d_model
         self.structure_embed = LayerStructureEmbedding(
-            self.hidden_dim,
+            config,
             tokenizer
         )
-        self.class_embed = nn.Linear(self.hidden_dim, num_classes)
+        self.class_embed = nn.Linear(self.hidden_dim, config.num_classes)
 
     def forward(
             self,
@@ -32,14 +37,13 @@ class SketchLayerClassifierModel(nn.Module):
         return self.class_embed(x)
 
 
-def build(config: SketchModelConfig, tokenizer: PreTrainedTokenizer):
-    num_classes = 4
+def build(config: SketchModelConfig, tokenizer: PreTrainedTokenizer, ):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     transformer = build_transformer(config)
     model = SketchLayerClassifierModel(
+        config,
         transformer,
-        num_classes,
-        tokenizer
+        tokenizer,
     )
     criterion = nn.CrossEntropyLoss(reduction='sum')
     criterion.to(device)

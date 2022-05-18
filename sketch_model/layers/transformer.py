@@ -17,8 +17,15 @@ from sketch_model.configs import SketchModelConfig
 
 class SketchTransformer(nn.Module):
 
-    def __init__(self, d_model=512, nhead=8, num_encoder_layers=6,
-                 dim_feedforward=2048, dropout=0.1, normalize_before=False):
+    def __init__(
+            self,
+            d_model=512,
+            nhead=8,
+            num_encoder_layers=6,
+            dim_feedforward=2048,
+            dropout=0.1,
+            normalize_before=False
+    ):
         super().__init__()
 
         encoder_layer = TransformerEncoderLayer(d_model, nhead, dim_feedforward,
@@ -128,7 +135,7 @@ def _get_clones(module, N):
     return nn.ModuleList([copy.deepcopy(module) for i in range(N)])
 
 
-def build_transformer(config: SketchModelConfig):
+def build_transformer(config: SketchModelConfig) -> SketchTransformer:
     return SketchTransformer(
         d_model=config.hidden_dim,
         dropout=config.dropout,

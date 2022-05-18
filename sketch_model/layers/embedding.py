@@ -1,32 +1,12 @@
-import enum
-from typing import Tuple
+from typing import Tuple, Optional
 
 import torch
 from torch import nn
 from transformers import PreTrainedTokenizerBase
 
-from sketch_model.datasets.dataset import LAYER_CLASS_MAP
+from sketch_model.configs import SketchModelConfig
+from sketch_model.configs.config import SentenceMethod, Aggregation, PosPattern
 from sketch_model.utils import NestedTensor
-
-
-class Aggregation(enum.Enum):
-    CONCAT = 0
-    SUM = 1
-
-
-class PosPattern(enum.Enum):
-    """
-    Enum class for the possible position patterns.
-    """
-    ONE = 0
-    FOUR = 1
-    TWO = 2
-
-
-class SentenceMethod(enum.Enum):
-    SUM = 0
-    MAX = 1
-    MEAN = 2
 
 
 class TextEmbedding(nn.Module):
@@ -88,50 +68,86 @@ class ImageEmbedding(nn.Module):
 class LayerStructureEmbedding(nn.Module):
     def __init__(
             self,
-            embedding_dim: int,
+            config: SketchModelConfig,
             tokenizer: PreTrainedTokenizerBase,
-            dropout_rate=0.2,
-            concat_image=True,
-            pos_pattern=PosPattern.ONE,
-            freq_depth=64,
-            sentence_method: SentenceMethod = SentenceMethod.SUM,
-            aggregation=Aggregation.SUM,
     ):
         super().__init__()
-        self.embedding_dim = embedding_dim
-        self.dropout_rate = dropout_rate
-        self.concat_image = concat_image
+        self.config = config
+        self.tokenizer = tokenizer
 
-        self.pos_pattern = pos_pattern
-        if self.pos_pattern == PosPattern.ONE:
-            self.num_groups = 4
-        elif self.pos_pattern == PosPattern.FOUR:
-            self.num_groups = 1
-        elif self.pos_pattern == PosPattern.TWO:
-            self.num_groups = 2
+        self.freq_fc: Optional[nn.Module] = None
+        self.coord_embeder: Optional[nn.Module] = None
+        self.init_pos_embedding()
+
+        self.image_embeder: Optional[nn.Module] = None
+        self.init_image_embedding()
+
+        self.token_embeder: Optional[nn.Module] = None
+        self.init_token_embedding()
+
+        self.color_embeder: Optional[nn.Module] = None  # RGBA
+        self.init_color_embedding()
+
+        self.class_embeder: Optional[nn.Module] = None  # Layer class
+        self.init_class_embedding()
+
+        self.concat_embeder: Optional[nn.Module] = None
+        self.init_concat_embedding()
+
+    @property
+    def embedding_dim(self):
+        return self.config.hidden_dim
+
+    def init_pos_embedding(self):
+        if self.config.pos_pattern == PosPattern.ONE:
+            num_groups = 4
+        elif self.config.pos_pattern == PosPattern.FOUR:
+            num_groups = 1
+        elif self.config.pos_pattern == PosPattern.TWO:
+            num_groups = 2
         else:
             raise ValueError("Unknown pos pattern")
-        self.freq_depth = freq_depth
-        self.freq_fc = nn.Linear(4 // self.num_groups, self.freq_depth)
+        self.freq_fc = nn.Linear(4 // num_groups, self.config.pos_freq)
         self.coord_embeder = nn.Sequential(
-            nn.Linear(freq_depth * 2, self.embedding_dim // self.num_groups),
+            nn.Linear(self.config.pos_freq * 2, self.embedding_dim // num_groups),
             nn.ReLU(),
-            nn.Linear(self.embedding_dim // self.num_groups, self.embedding_dim // self.num_groups),
+            nn.Linear(self.embedding_dim // num_groups, self.embedding_dim // num_groups),
         )
 
-        self.sentence_method = sentence_method
-        self.token_embeder = TextEmbedding(embedding_dim, tokenizer, self.dropout_rate, self.sentence_method)
+    def init_token_embedding(self):
+        if self.config.use_name:
+            self.token_embeder = TextEmbedding(
+                self.embedding_dim,
+                self.tokenizer,
+                self.config.dropout,
+                self.config.sentence_method
+            )
 
-        if self.concat_image:
-            self.image_embeder = ImageEmbedding(embedding_dim, 4)  # Layer image resized to 64x64
-        else:
-            self.image_embeder = None
+    def init_image_embedding(self):
+        if self.config.use_image:
+            self.image_embeder = ImageEmbedding(self.embedding_dim, 4)
 
-        self.color_embeder = nn.Linear(4, self.embedding_dim)  # RGBA
+    def init_color_embedding(self):
+        if self.config.use_color:
+            self.color_embeder = nn.Linear(4, self.embedding_dim)
 
-        self.class_embeder = nn.Embedding(len(LAYER_CLASS_MAP), self.embedding_dim)  # Layer class
+    def init_class_embedding(self):
+        if self.config.use_class:
+            self.class_embeder = nn.Embedding(self.config.class_types, self.embedding_dim)
 
-        self.concat_embeder = nn.Linear(self.embedding_dim * (4 if self.concat_image else 3), self.embedding_dim)
+    def init_concat_embedding(self):
+        if self.config.aggregation == Aggregation.CONCAT:
+            count = 0
+            if self.config.use_image:
+                count += 1
+            if self.config.use_name:
+                count += 1
+            if self.config.use_color:
+                count += 1
+            if self.config.use_class:
+                count += 1
+
+            self.concat_embeder = nn.Linear(self.embedding_dim * count, self.embedding_dim)
 
     def forward(
             self,
@@ -141,27 +157,38 @@ class LayerStructureEmbedding(nn.Module):
             colors: NestedTensor,
             classes: NestedTensor,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
-        name_embeds = self.token_embeder(names.tensors)
-        pos_embeds = self.embed_pos(boxes.tensors, boxes.mask)
-        color_embeds = self.color_embeder(colors.tensors)
-        class_embeds = self.class_embeder(classes.tensors)
-        if self.concat_image:
-            image_embeds = self.image_embeder(images.tensors)
-            embeds = torch.cat([image_embeds, name_embeds, color_embeds, class_embeds], dim=-1)
+        embeds = []
+        if self.config.use_image:
+            embeds.append(self.image_embeder(images.tensors))
+        if self.config.use_name:
+            embeds.append(self.token_embeder(names.tensors))
+        if self.config.use_color:
+            embeds.append(self.color_embeder(colors.tensors))
+        if self.config.use_class:
+            embeds.append(self.class_embeder(classes.tensors))
+        if len(embeds) == 0:
+            raise ValueError("No embedding")
+        if self.config.aggregation == Aggregation.CONCAT:
+            embeds = torch.cat(embeds, dim=-1)
+            embeds = self.concat_embeder(embeds)
         else:
-            embeds = torch.cat([name_embeds, color_embeds, class_embeds], dim=-1)
-        embeds = self.concat_embeder(embeds)
-        pos_embeds = nn.Dropout(self.dropout_rate)(pos_embeds)
-        embeds = nn.Dropout(self.dropout_rate)(embeds)
+            embeds = torch.sum(torch.stack(embeds, dim=-1), dim=-1)
+        pos_embeds = self.pos_embeder(boxes.tensors)
+
+        embeds = nn.Dropout(self.config.dropout)(embeds)
+        pos_embeds = nn.Dropout(self.config.dropout)(pos_embeds)
 
         return embeds, pos_embeds
 
-    def embed_pos(self, boxes: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
-        if self.pos_pattern == PosPattern.ONE:
+    def pos_embeder(
+            self,
+            boxes: torch.Tensor
+    ) -> torch.Tensor:
+        if self.config.pos_pattern == PosPattern.ONE:
             boxes = torch.unsqueeze(boxes, dim=3)
-        elif self.pos_pattern == PosPattern.FOUR:
+        elif self.config.pos_pattern == PosPattern.FOUR:
             boxes = torch.unsqueeze(boxes, dim=2)
-        elif self.pos_pattern == PosPattern.TWO:
+        elif self.config.pos_pattern == PosPattern.TWO:
             boxes = torch.reshape(boxes, boxes.shape[:2] + (2, 2))
         else:
             raise ValueError('Unknown pos pattern')
