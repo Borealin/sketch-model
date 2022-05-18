@@ -99,3 +99,6 @@ class SketchModelConfig(
     use_name: bool = True
     use_color: bool = True
     use_class: bool = True
+
+    vocab_size: int = 21128
+    pad_token_id: int = 0

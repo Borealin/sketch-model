@@ -30,8 +30,9 @@ def main(config: SketchModelConfig):
     print("Loading Tokenizer...")
     tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(config.tokenizer_name)
     tokenizer.model_max_length = config.max_name_length
-
-    model, criterion = build(config, tokenizer)
+    config.vocab_size = tokenizer.vocab_size
+    config.pad_token_id = tokenizer.pad_token_id
+    model, criterion = build(config)
     model.to(device)
 
     param_dicts = [
@@ -95,10 +96,10 @@ def main(config: SketchModelConfig):
                      **{f'test_{k}': v for k, v in test_stats.items()},
                      'epoch': epoch,
                      'n_parameters': n_parameters}
-        writer.add_scalars('train/_loss', train_stats['loss'], epoch)
-        writer.add_scalars('train/_acc', train_stats['acc'], epoch)
-        writer.add_scalars('test/_loss', test_stats['loss'], epoch)
-        writer.add_scalars('test/_acc', test_stats['acc'], epoch)
+        writer.add_scalar('train/loss', train_stats['loss'], epoch)
+        writer.add_scalar('train/acc', train_stats['acc'], epoch)
+        writer.add_scalar('test/loss', test_stats['loss'], epoch)
+        writer.add_scalar('test/acc', test_stats['acc'], epoch)
         writer.add_scalar("learning_rate", optimizer.param_groups[0]['lr'], epoch)
 
         if config.output_dir and utils.is_main_process():

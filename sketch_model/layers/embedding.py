@@ -2,7 +2,6 @@ from typing import Tuple, Optional
 
 import torch
 from torch import nn
-from transformers import PreTrainedTokenizerBase
 
 from sketch_model.configs import SketchModelConfig
 from sketch_model.configs.config import SentenceMethod, Aggregation, PosPattern
@@ -13,14 +12,15 @@ class TextEmbedding(nn.Module):
     def __init__(
             self,
             embedding_dim: int,
-            tokenizer: PreTrainedTokenizerBase,
+            vocab_size: int,
+            pad_token_id: int,
             dropout_rate: float,
             sentence_method: SentenceMethod = SentenceMethod.SUM,
             layer_norm_eps: float = 1e-12,
     ):
         super().__init__()
-        self.word_embeddings = nn.Embedding(len(tokenizer.get_vocab()), embedding_dim,
-                                            padding_idx=tokenizer.pad_token_id)
+        self.word_embeddings = nn.Embedding(vocab_size, embedding_dim,
+                                            padding_idx=pad_token_id)
         self.layer_norm = nn.LayerNorm(embedding_dim, eps=layer_norm_eps)
         self.dropout = nn.Dropout(dropout_rate)
         self.sentence_method = sentence_method
@@ -69,11 +69,9 @@ class LayerStructureEmbedding(nn.Module):
     def __init__(
             self,
             config: SketchModelConfig,
-            tokenizer: PreTrainedTokenizerBase,
     ):
         super().__init__()
         self.config = config
-        self.tokenizer = tokenizer
 
         self.freq_fc: Optional[nn.Module] = None
         self.coord_embeder: Optional[nn.Module] = None
@@ -118,7 +116,8 @@ class LayerStructureEmbedding(nn.Module):
         if self.config.use_name:
             self.token_embeder = TextEmbedding(
                 self.embedding_dim,
-                self.tokenizer,
+                self.config.vocab_size,
+                self.config.pad_token_id,
                 self.config.dropout,
                 self.config.sentence_method
             )

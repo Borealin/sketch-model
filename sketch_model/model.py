@@ -13,14 +13,12 @@ class SketchLayerClassifierModel(nn.Module):
             self,
             config: SketchModelConfig,
             transformer: SketchTransformer,
-            tokenizer: PreTrainedTokenizer,
     ):
         super().__init__()
         self.transformer: SketchTransformer = transformer
         self.hidden_dim = transformer.d_model
         self.structure_embed = LayerStructureEmbedding(
             config,
-            tokenizer
         )
         self.class_embed = nn.Linear(self.hidden_dim, config.num_classes)
 
@@ -38,13 +36,12 @@ class SketchLayerClassifierModel(nn.Module):
         return class_embed.softmax(dim=-1)
 
 
-def build(config: SketchModelConfig, tokenizer: PreTrainedTokenizer, ):
+def build(config: SketchModelConfig):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     transformer = build_transformer(config)
     model = SketchLayerClassifierModel(
         config,
         transformer,
-        tokenizer,
     )
     criterion = nn.CrossEntropyLoss(reduction='sum')
     criterion.to(device)
