@@ -31,13 +31,11 @@ class SketchDataset(Dataset):
     def __init__(self, index_json_path: str, tokenizer: PreTrainedTokenizerBase):
         self.data_folder = Path(index_json_path).parent
         self.index_json = json.load(open(index_json_path, 'r'))
-        self.tokenizer = tokenizer
         self.img_transform = T.Compose([
             T.ToTensor(),
             T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ])
-        self.max_len = tokenizer.model_max_length
-        self.data = self.load_data()
+        self.data = self.load_data(tokenizer)
 
     def __len__(self):
         return len(self.data)
@@ -45,7 +43,7 @@ class SketchDataset(Dataset):
     def __getitem__(self, idx):
         return self.data[idx]
 
-    def load_data(self):
+    def load_data(self, tokenizer: PreTrainedTokenizerBase):
         data = []
         for artboard in tqdm(self.index_json, desc='Loading Artboards'):
             json_path = self.data_folder / artboard['json']
@@ -62,7 +60,7 @@ class SketchDataset(Dataset):
             labels = []
             for layer in json_data['layers']:
                 layer_name = layer['name'].lower()
-                names.append(self.tokenizer.encode(
+                names.append(tokenizer.encode(
                     layer_name,
                     add_special_tokens=False,
                     padding=PaddingStrategy.MAX_LENGTH,
