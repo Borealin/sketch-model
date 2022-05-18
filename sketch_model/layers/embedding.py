@@ -104,15 +104,15 @@ class LayerStructureEmbedding(nn.Module):
 
         self.pos_pattern = pos_pattern
         if self.pos_pattern == PosPattern.ONE:
-            self.num_groups = 1
-        elif self.pos_pattern == PosPattern.FOUR:
             self.num_groups = 4
+        elif self.pos_pattern == PosPattern.FOUR:
+            self.num_groups = 1
         elif self.pos_pattern == PosPattern.TWO:
             self.num_groups = 2
         else:
             raise ValueError("Unknown pos pattern")
         self.freq_depth = freq_depth
-        self.freq_fc = nn.Linear(self.num_groups, self.freq_depth)
+        self.freq_fc = nn.Linear(4 // self.num_groups, self.freq_depth)
         self.coord_embeder = nn.Sequential(
             nn.Linear(freq_depth * 2, self.embedding_dim // self.num_groups),
             nn.ReLU(),
@@ -122,11 +122,16 @@ class LayerStructureEmbedding(nn.Module):
         self.sentence_method = sentence_method
         self.token_embeder = TextEmbedding(embedding_dim, tokenizer, self.dropout_rate, self.sentence_method)
 
-        self.image_embeder = ImageEmbedding(embedding_dim, 4)
+        if self.concat_image:
+            self.image_embeder = ImageEmbedding(embedding_dim, 4)  # Layer image resized to 64x64
+        else:
+            self.image_embeder = None
 
         self.color_embeder = nn.Linear(4, self.embedding_dim)  # RGBA
 
-        self.class_embeder = nn.Embedding(len(LAYER_CLASS_MAP), self.embedding_dim)
+        self.class_embeder = nn.Embedding(len(LAYER_CLASS_MAP), self.embedding_dim)  # Layer class
+
+        self.concat_embeder = nn.Linear(self.embedding_dim * (4 if self.concat_image else 3), self.embedding_dim)
 
     def forward(
             self,
@@ -145,6 +150,7 @@ class LayerStructureEmbedding(nn.Module):
             embeds = torch.cat([image_embeds, name_embeds, color_embeds, class_embeds], dim=-1)
         else:
             embeds = torch.cat([name_embeds, color_embeds, class_embeds], dim=-1)
+        embeds = self.concat_embeder(embeds)
         pos_embeds = nn.Dropout(self.dropout_rate)(pos_embeds)
         embeds = nn.Dropout(self.dropout_rate)(embeds)
 
@@ -153,7 +159,7 @@ class LayerStructureEmbedding(nn.Module):
     def embed_pos(self, boxes: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         if self.pos_pattern == PosPattern.ONE:
             boxes = torch.unsqueeze(boxes, dim=3)
-        elif self.pos_pattern == PosPattern.ONE:
+        elif self.pos_pattern == PosPattern.FOUR:
             boxes = torch.unsqueeze(boxes, dim=2)
         elif self.pos_pattern == PosPattern.TWO:
             boxes = torch.reshape(boxes, boxes.shape[:2] + (2, 2))

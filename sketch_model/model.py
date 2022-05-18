@@ -12,12 +12,12 @@ class SketchLayerClassifierModel(nn.Module):
     def __init__(self, transformer, num_classes, tokenizer):
         super().__init__()
         self.transformer: SketchTransformer = transformer
-        hidden_dim = transformer.d_model
+        self.hidden_dim = transformer.d_model
         self.structure_embed = LayerStructureEmbedding(
-            hidden_dim,
+            self.hidden_dim,
             tokenizer
         )
-        self.class_embed = nn.Linear(hidden_dim, num_classes + 1)
+        self.class_embed = nn.Linear(self.hidden_dim, num_classes)
 
     def forward(
             self,
@@ -28,7 +28,7 @@ class SketchLayerClassifierModel(nn.Module):
             batch_class: NestedTensor
     ):
         x, pos_embed = self.structure_embed(batch_img, batch_name, batch_bbox, batch_color, batch_class)
-        x = self.transformer(x, batch_img.mask, pos_embed)
+        x = self.transformer(x, None, pos_embed)
         x = self.class_embed(x)
         return x.log_softmax(dim=2)
 
