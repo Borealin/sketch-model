@@ -9,6 +9,7 @@ from pathlib import Path
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
+from torch.utils.tensorboard import SummaryWriter
 from transformers import AutoTokenizer, PreTrainedTokenizer
 
 from sketch_model.configs import SketchModelConfig, get_config
@@ -70,6 +71,8 @@ def main(config: SketchModelConfig):
 
     print("Start training")
     start_time = time.time()
+    run_dir = output_dir / f'{time.strftime("%d-%H%M", time.localtime())}'
+    writer = SummaryWriter(str(run_dir))
     for epoch in range(config.start_epoch, config.epochs):
         train_stats = train_one_epoch(config, model, criterion, data_loader_train, optimizer, device, epoch,
                                       config.clip_max_norm)
@@ -92,10 +95,16 @@ def main(config: SketchModelConfig):
                      **{f'test_{k}': v for k, v in test_stats.items()},
                      'epoch': epoch,
                      'n_parameters': n_parameters}
+        writer.add_scalars('train/_loss', train_stats['loss'], epoch)
+        writer.add_scalars('train/_acc', train_stats['acc'], epoch)
+        writer.add_scalars('test/_loss', test_stats['loss'], epoch)
+        writer.add_scalars('test/_acc', test_stats['acc'], epoch)
+        writer.add_scalar("learning_rate", optimizer.param_groups[0]['lr'], epoch)
 
         if config.output_dir and utils.is_main_process():
             with (output_dir / "log.txt").open("a") as f:
                 f.write(json.dumps(log_stats) + "\n")
+    writer.flush()
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     print('Training time {}'.format(total_time_str))
