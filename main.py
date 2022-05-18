@@ -14,7 +14,7 @@ from transformers import AutoTokenizer, PreTrainedTokenizer
 from sketch_model.configs import SketchModelConfig, get_config
 from sketch_model.datasets import build_dataset
 from sketch_model.model import build
-from sketch_model.utils import misc as utils
+from sketch_model.utils import misc as utils, accuracy, f1score
 
 
 def main(config: SketchModelConfig):
@@ -71,9 +71,8 @@ def main(config: SketchModelConfig):
     print("Start training")
     start_time = time.time()
     for epoch in range(config.start_epoch, config.epochs):
-        train_stats = train_one_epoch(
-            model, criterion, data_loader_train, optimizer, device, epoch,
-            config.clip_max_norm)
+        train_stats = train_one_epoch(config, model, criterion, data_loader_train, optimizer, device, epoch,
+                                      config.clip_max_norm)
         lr_scheduler.step()
         if config.output_dir:
             checkpoint_paths = [output_dir / 'checkpoint.pth']
@@ -103,6 +102,7 @@ def main(config: SketchModelConfig):
 
 
 def train_one_epoch(
+        config: SketchModelConfig,
         model: torch.nn.Module,
         criterion: torch.nn.Module,
         dataloader: torch.utils.data.DataLoader,
@@ -115,6 +115,8 @@ def train_one_epoch(
     criterion.train()
     metric_logger = utils.MetricLogger(delimiter="  ")
     metric_logger.add_meter('lr', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
+    metric_logger.add_meter('acc', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
+    metric_logger.add_meter('f1', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
     header = 'Epoch: [{}]'.format(epoch)
     print_freq = 10
 
@@ -131,10 +133,17 @@ def train_one_epoch(
         targets = [t.to(device) for t in targets]
         outputs = model(batch_img, batch_name, batch_bbox, batch_color, batch_class)
         batch_ce_loss = torch.tensor(0.0, device=device)
+        acc = 0
+        f1 = 0
         for i in range(len(targets)):
-            ce_loss = criterion(outputs[i][:len(targets[i])], targets[i])
+            packed = outputs[i][:len(targets[i])]
+            ce_loss = criterion(packed, targets[i])
             batch_ce_loss += ce_loss
-
+            pred = packed.max(-1)[1]
+            acc += accuracy(pred, targets[i])
+            f1 += f1score(pred, targets[i], 'micro')
+        acc = acc / len(targets)
+        f1 = f1 / len(targets)
         if not math.isfinite(batch_ce_loss):
             print("Loss is {}, stopping training".format(batch_ce_loss))
             sys.exit(1)
@@ -145,7 +154,8 @@ def train_one_epoch(
         if max_norm > 0:
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm)
         optimizer.step()
-
+        metric_logger.update(acc=acc)
+        metric_logger.update(f1=f1)
         metric_logger.update(loss=batch_ce_loss.detach())
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
     metric_logger.synchronize_between_processes()
@@ -159,6 +169,8 @@ def evaluate(model, criterion, dataloader, device):
     criterion.eval()
 
     metric_logger = utils.MetricLogger(delimiter="  ")
+    metric_logger.add_meter('acc', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
+    metric_logger.add_meter('f1', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
     header = 'Test:'
     print_freq = 10
 
@@ -176,10 +188,20 @@ def evaluate(model, criterion, dataloader, device):
 
         outputs = model(batch_img, batch_name, batch_bbox, batch_color, batch_class)
         batch_ce_loss = torch.tensor(0.0, device=device)
+        acc = 0
+        f1 = 0
         for i in range(len(targets)):
-            ce_loss = criterion(outputs[i][:len(targets[i])], targets[i])
+            packed = outputs[i][:len(targets[i])]
+            ce_loss = criterion(packed, targets[i])
             batch_ce_loss += ce_loss
+            pred = packed.max(-1)[1]
+            acc += accuracy(pred, targets[i])
+            f1 += f1score(pred, targets[i], 'micro')
+        acc = acc / len(targets)
+        f1 = f1 / len(targets)
 
+        metric_logger.update(acc=acc)
+        metric_logger.update(f1=f1)
         metric_logger.update(loss=batch_ce_loss.detach())
 
     # gather the stats from all processes

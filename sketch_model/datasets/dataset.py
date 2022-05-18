@@ -30,7 +30,7 @@ LAYER_CLASS_MAP = {
 class SketchDataset(Dataset):
     def __init__(self, index_json_path: str, tokenizer: PreTrainedTokenizerBase):
         self.data_folder = Path(index_json_path).parent
-        self.index_json = json.load(open(index_json_path, 'r'))[:20]
+        self.index_json = json.load(open(index_json_path, 'r'))
         self.tokenizer = tokenizer
         self.img_transform = T.Compose([
             T.ToTensor(),
