@@ -2,8 +2,10 @@ import enum
 from dataclasses import dataclass
 from typing import Optional
 
-from sketch_model.datasets.dataset import LAYER_CLASS_MAP
 from fastclasses_json import dataclass_json, JSONMixin
+
+from .class_def import LAYER_CLASS_MAP
+
 
 class Aggregation(enum.Enum):
     CONCAT = 0
@@ -106,6 +108,8 @@ class SketchModelConfig(
 
     vocab_size: int = 21128
     pad_token_id: int = 0
+
+    lazy_load: bool = False
 
     def save(self, path: str):
         open(path, 'w').write(self.to_json())

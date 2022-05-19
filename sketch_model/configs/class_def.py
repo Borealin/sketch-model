@@ -1,0 +1,16 @@
+LAYER_CLASS_MAP = {
+    'symbolMaster': 0,
+    'group': 1,
+    'oval': 2,
+    'polygon': 3,
+    'rectangle': 4,
+    'shapePath': 5,
+    'star': 6,
+    'triangle': 7,
+    'shapeGroup': 8,
+    'text': 9,
+    'symbolInstance': 10,
+    'slice': 11,
+    'MSImmutableHotspotLayer': 12,
+    'bitmap': 13,
+}

@@ -51,8 +51,8 @@ def main(config: SketchModelConfig):
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, config.lr_drop)
 
     print("Loading Dataset...")
-    dataset_train = build_dataset(config.train_index_json, tokenizer)
-    dataset_val = build_dataset(config.test_index_json, tokenizer)
+    dataset_train = build_dataset(config, config.train_index_json, tokenizer)
+    dataset_val = build_dataset(config, config.test_index_json, tokenizer)
     sampler_train = RandomSampler(dataset_train)
     sampler_val = SequentialSampler(dataset_val)
     batch_sampler_train = BatchSampler(

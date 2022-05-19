@@ -1,4 +1,6 @@
 import argparse
+
+from .class_def import *
 from .config import *
 
 
@@ -26,6 +28,8 @@ def config_with_arg() -> SketchModelConfig:
                            action="store_false", default=True)
     argparser.add_argument('--nomask', dest="use_mask",
                            action="store_false", default=True)
+    argparser.add_argument('--lazy', dest="lazy",
+                           action="store_true", default=False)
     args = argparser.parse_args()
     config = default_config()
     if args.train is not None:
@@ -64,4 +68,5 @@ def config_with_arg() -> SketchModelConfig:
     config.use_color = args.use_color
     config.use_class = args.use_class
     config.use_mask = args.use_mask
+    config.lazy_load = args.lazy
     return config
