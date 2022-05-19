@@ -1,14 +1,16 @@
 import datetime
 import json
 import math
+import os
 import random
 import sys
 import time
-import os
+import urllib.parse
 from pathlib import Path
 
+import numpy
 import numpy as np
-
+import requests
 import torch
 from torch import nn
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, BatchSampler
@@ -18,7 +20,7 @@ from transformers import AutoTokenizer, PreTrainedTokenizer
 from sketch_model.configs import SketchModelConfig, config_with_arg
 from sketch_model.datasets import build_dataset
 from sketch_model.model import build
-from sketch_model.utils import misc as utils, accuracy, f1score
+from sketch_model.utils import misc as utils, accuracy, f1score, r2score
 
 
 def main(config: SketchModelConfig):
@@ -72,7 +74,7 @@ def main(config: SketchModelConfig):
     print('number of params:', n_parameters)
 
     if config.evaluate:
-        test_stats = evaluate(model, criterion, data_loader_val, device)
+        test_stats = evaluate(config, model, criterion, data_loader_val, device)
         return
 
     output_dir = Path(config.output_dir) / config.task_name
@@ -86,7 +88,11 @@ def main(config: SketchModelConfig):
     print("Start training")
     start_time = time.time()
     writer = SummaryWriter(str(tensorboard_dir))
-    for epoch in range(config.start_epoch, config.epochs):
+    best_train_acc = 0
+    best_train_f1 = 0
+    best_test_acc = 0
+    best_test_f1 = 0
+    for epoch in range(1):
         train_stats = train_one_epoch(config, model, criterion, data_loader_train, optimizer, device, epoch,
                                       config.clip_max_norm)
         lr_scheduler.step()
@@ -104,15 +110,23 @@ def main(config: SketchModelConfig):
                     'epoch': epoch,
                     'config': config,
                 }, checkpoint_path)
-        test_stats = evaluate(model, criterion, data_loader_val, device)
+        test_stats = evaluate(config, model, criterion, data_loader_val, device)
         log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
                      **{f'test_{k}': v for k, v in test_stats.items()},
                      'epoch': epoch,
                      'n_parameters': n_parameters}
+        best_train_acc = max(best_train_acc, train_stats['acc'])
+        best_train_f1 = max(best_train_f1, train_stats['f1'])
+        best_test_acc = max(best_test_acc, test_stats['acc'])
+        best_test_f1 = max(best_test_f1, test_stats['f1'])
         writer.add_scalar('train/loss', train_stats['loss'], epoch)
         writer.add_scalar('train/acc', train_stats['acc'], epoch)
+        writer.add_scalar('train/f1', train_stats['f1'], epoch)
+        writer.add_scalar('train/r2', train_stats['r2'], epoch)
         writer.add_scalar('test/loss', test_stats['loss'], epoch)
         writer.add_scalar('test/acc', test_stats['acc'], epoch)
+        writer.add_scalar('test/f1', test_stats['f1'], epoch)
+        writer.add_scalar('test/r2', train_stats['r2'], epoch)
         writer.add_scalar(
             "learning_rate", optimizer.param_groups[0]['lr'], epoch)
 
@@ -123,6 +137,16 @@ def main(config: SketchModelConfig):
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
     print('Training time {}'.format(total_time_str))
+    print('Best test acc: {}'.format(best_test_acc))
+    print('Best test f1: {}'.format(best_test_f1))
+    print('Best train acc: {}'.format(best_train_acc))
+    print('Best train f1: {}'.format(best_train_f1))
+    sct_key = os.environ.get('SCT_KEY')
+    if sct_key:
+        title = f'{config.task_name} finished'
+        content = f'Training {config.task_name} finished, total time:{total_time_str}, best test acc:{best_test_acc}, best test f1:{best_test_f1}, best train acc:{best_train_acc}, best train f1:{best_train_f1}'
+        res = requests.get(f"https://sctapi.ftqq.com/{sct_key}.send?title={urllib.parse.quote_plus(title)}&desp={urllib.parse.quote_plus(content)}")
+        print(res.text)
 
 
 def train_one_epoch(
@@ -144,7 +168,9 @@ def train_one_epoch(
         window_size=1, fmt='{value:.6f}'))
     metric_logger.add_meter('f1', utils.SmoothedValue(
         window_size=1, fmt='{value:.6f}'))
-    header = 'Epoch: [{}]'.format(epoch)
+    metric_logger.add_meter('r2', utils.SmoothedValue(
+        window_size=1, fmt='{value:.6f}'))
+    header = f'{config.task_name} Epoch: [{epoch}]'
     print_freq = 10
 
     for (batch_img,
@@ -161,17 +187,16 @@ def train_one_epoch(
         outputs = model(batch_img, batch_name, batch_bbox,
                         batch_color, batch_class)
         batch_ce_loss = torch.tensor(0.0, device=device)
-        acc = 0
-        f1 = 0
+        acc, f1, r2 = 0, 0, 0
         for i in range(len(targets)):
             packed = outputs[i][:len(targets[i])]
             ce_loss = criterion(packed, targets[i])
             batch_ce_loss += ce_loss
             pred = packed.max(-1)[1]
             acc += accuracy(pred, targets[i])
-            f1 += f1score(pred, targets[i], 'micro')
-        acc = acc / len(targets)
-        f1 = f1 / len(targets)
+            f1 += f1score(pred, targets[i])
+            r2 += r2score(pred, targets[i])
+        acc, f1, r2 = numpy.array([acc, f1, r2]) / len(targets)
         if not math.isfinite(batch_ce_loss):
             print("Loss is {}, stopping training".format(batch_ce_loss))
             sys.exit(1)
@@ -182,8 +207,7 @@ def train_one_epoch(
         if max_norm > 0:
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm)
         optimizer.step()
-        metric_logger.update(acc=acc)
-        metric_logger.update(f1=f1)
+        metric_logger.update(acc=acc, f1=f1, r2=r2)
         metric_logger.update(loss=batch_ce_loss.detach())
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
     metric_logger.synchronize_between_processes()
@@ -193,10 +217,11 @@ def train_one_epoch(
 
 @torch.no_grad()
 def evaluate(
-    model: nn.Module,
-    criterion: nn.modules.loss._Loss,
-    dataloader: DataLoader,
-    device: torch.device,
+        config: SketchModelConfig,
+        model: nn.Module,
+        criterion: nn.Module,
+        dataloader: DataLoader,
+        device: torch.device,
 ):
     model.eval()
     criterion.eval()
@@ -206,7 +231,9 @@ def evaluate(
         window_size=1, fmt='{value:.6f}'))
     metric_logger.add_meter('f1', utils.SmoothedValue(
         window_size=1, fmt='{value:.6f}'))
-    header = 'Test:'
+    metric_logger.add_meter('r2', utils.SmoothedValue(
+        window_size=1, fmt='{value:.6f}'))
+    header = f'{config.task_name} Test:'
     print_freq = 10
 
     for (batch_img,
@@ -224,20 +251,18 @@ def evaluate(
         outputs = model(batch_img, batch_name, batch_bbox,
                         batch_color, batch_class)
         batch_ce_loss = torch.tensor(0.0, device=device)
-        acc = 0
-        f1 = 0
+        acc, f1, r2 = 0, 0, 0
         for i in range(len(targets)):
             packed = outputs[i][:len(targets[i])]
             ce_loss = criterion(packed, targets[i])
             batch_ce_loss += ce_loss
             pred = packed.max(-1)[1]
             acc += accuracy(pred, targets[i])
-            f1 += f1score(pred, targets[i], 'micro')
-        acc = acc / len(targets)
-        f1 = f1 / len(targets)
+            f1 += f1score(pred, targets[i])
+            r2 += r2score(pred, targets[i])
+        acc, f1, r2 = numpy.array([acc, f1, r2]) / len(targets)
 
-        metric_logger.update(acc=acc)
-        metric_logger.update(f1=f1)
+        metric_logger.update(acc=acc, f1=f1, r2=r2)
         metric_logger.update(loss=batch_ce_loss.detach())
 
     # gather the stats from all processes

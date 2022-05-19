@@ -1,6 +1,6 @@
 import numpy as np
 from sklearn.metrics import confusion_matrix
-from sklearn.metrics import f1_score
+from sklearn.metrics import f1_score, r2_score
 
 
 def accuracy(scores, targets):
@@ -24,7 +24,7 @@ def accuracy(scores, targets):
     return acc
 
 
-def f1score(scores, targets, average='binary'):
+def f1score(scores, targets, average='micro'):
     """Computes the F1 score using scikit-learn for binary class labels. 
 
     Returns the F1 score for the positive class, i.e. labelled '1'.
@@ -32,3 +32,9 @@ def f1score(scores, targets, average='binary'):
     y_true = targets.cpu().numpy()
     y_pred = scores.cpu().numpy()
     return f1_score(y_true, y_pred, average=average)
+
+
+def r2score(scores, targets):
+    y_true = targets.cpu().numpy()
+    y_pred = scores.cpu().numpy()
+    return r2_score(y_true, y_pred)
