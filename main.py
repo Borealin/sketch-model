@@ -84,7 +84,6 @@ def main(config: SketchModelConfig):
     config.save(output_dir / 'config.json')
 
     print("Start training")
-    print("main pid", os.getpid())
     start_time = time.time()
     writer = SummaryWriter(str(tensorboard_dir))
     for epoch in range(config.start_epoch, config.epochs):
@@ -147,7 +146,6 @@ def train_one_epoch(
         window_size=1, fmt='{value:.6f}'))
     header = 'Epoch: [{}]'.format(epoch)
     print_freq = 10
-    print("train_one_epoch pid", os.getpid())
 
     for (batch_img,
          batch_name,
