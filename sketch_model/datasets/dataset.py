@@ -50,7 +50,7 @@ class SketchDataset(Dataset):
         asset_image_rgb = Image.open(asset_image_path).convert('RGB')
         asset_image_tensor = self.img_transform(asset_image_rgb)
         images = torch.stack(asset_image_tensor.split(single_layer_size[1], dim=1))
-        return images, *self.data[idx]
+        return (images, *self.data[idx])
 
     def load_data(self, tokenizer: PreTrainedTokenizerBase):
         data = []
