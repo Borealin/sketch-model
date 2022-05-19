@@ -279,10 +279,10 @@ def padding(x: Tuple[Tensor]) -> 'NestedTensor':
     dtype = x[0].dtype
     device = x[0].device
     tensor = torch.zeros(batch_padded_shape, dtype=dtype, device=device)
-    mask = torch.zeros(batch_padded_shape, dtype=torch.bool, device=device)
+    mask = torch.ones(batch_padded_shape, dtype=torch.bool, device=device)
     for x_input, padded, m in zip(x, tensor, mask):
         padded[:x_input.shape[0]].copy_(x_input)
-        m[:x_input.shape[0]] = True
+        m[:x_input.shape[0]] = False
     return NestedTensor(
         tensor,
         mask

@@ -24,12 +24,13 @@ class SketchTransformer(nn.Module):
             num_encoder_layers=6,
             dim_feedforward=2048,
             dropout=0.1,
-            normalize_before=False
+            normalize_before=False,
+            batch_first=True,
     ):
         super().__init__()
 
         encoder_layer = TransformerEncoderLayer(d_model, nhead, dim_feedforward,
-                                                dropout, normalize_before)
+                                                dropout, normalize_before, batch_first)
         encoder_norm = nn.LayerNorm(d_model) if normalize_before else None
         self.encoder = TransformerEncoder(encoder_layer, num_encoder_layers, encoder_norm)
 
@@ -74,9 +75,9 @@ class TransformerEncoder(nn.Module):
 
 class TransformerEncoderLayer(nn.Module):
 
-    def __init__(self, d_model, nhead, dim_feedforward=2048, dropout=0.1, normalize_before=False):
+    def __init__(self, d_model, nhead, dim_feedforward=2048, dropout=0.1, normalize_before=False, batch_first=True):
         super().__init__()
-        self.self_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout)
+        self.self_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout, batch_first=batch_first)
         # Implementation of Feedforward model
         self.linear1 = nn.Linear(d_model, dim_feedforward)
         self.dropout = nn.Dropout(dropout)
@@ -143,4 +144,5 @@ def build_transformer(config: SketchModelConfig) -> SketchTransformer:
         dim_feedforward=config.dim_feedforward,
         num_encoder_layers=config.enc_layers,
         normalize_before=config.pre_norm,
+        batch_first=True
     )

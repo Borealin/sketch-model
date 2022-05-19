@@ -32,7 +32,7 @@ class TransformerConfig:
     hidden_dim: int = 256
     dropout: float = 0.1
     nheads: int = 8
-    pre_norm: bool = False
+    pre_norm: bool = True
     use_mask: bool = True
 
 

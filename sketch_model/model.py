@@ -3,8 +3,7 @@ from torch import nn
 from transformers import PreTrainedTokenizer
 
 from sketch_model.configs import SketchModelConfig
-from sketch_model.layers.embedding import LayerStructureEmbedding
-from sketch_model.layers.transformer import build_transformer, SketchTransformer
+from sketch_model.layers import LayerStructureEmbedding, build_transformer, SketchTransformer
 from sketch_model.utils import NestedTensor
 
 
@@ -15,6 +14,7 @@ class SketchLayerClassifierModel(nn.Module):
             transformer: SketchTransformer,
     ):
         super().__init__()
+        self.config = config
         self.transformer: SketchTransformer = transformer
         self.hidden_dim = transformer.d_model
         self.structure_embed = LayerStructureEmbedding(
@@ -31,7 +31,11 @@ class SketchLayerClassifierModel(nn.Module):
             batch_class: NestedTensor
     ):
         x, pos_embed = self.structure_embed(batch_img, batch_name, batch_bbox, batch_color, batch_class)
-        x = self.transformer(x, None, pos_embed)
+        if self.config.use_mask:
+            mask = batch_class.mask
+        else:
+            mask = None
+        x = self.transformer(x, mask, pos_embed)
         class_embed = self.class_embed(x)
         return class_embed.softmax(dim=-1)
 
