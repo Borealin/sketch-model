@@ -65,7 +65,7 @@ class InitConfig:
 @dataclass
 class LRConfig:
     lr: float = 1e-4
-    lr_drop: int = 20
+    lr_drop: int = 100
 
 
 @dataclass
