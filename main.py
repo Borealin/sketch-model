@@ -88,11 +88,8 @@ def main(config: SketchModelConfig):
     print("Start training")
     start_time = time.time()
     writer = SummaryWriter(str(tensorboard_dir))
-    best_train_acc = 0
-    best_train_f1 = 0
-    best_test_acc = 0
-    best_test_f1 = 0
-    for epoch in range(1):
+    best_train_acc, best_train_f1, best_test_acc, best_test_f1 = [0] * 4
+    for epoch in range(config.start_epoch, config.epochs):
         train_stats = train_one_epoch(config, model, criterion, data_loader_train, optimizer, device, epoch,
                                       config.clip_max_norm)
         lr_scheduler.step()
@@ -115,10 +112,10 @@ def main(config: SketchModelConfig):
                      **{f'test_{k}': v for k, v in test_stats.items()},
                      'epoch': epoch,
                      'n_parameters': n_parameters}
-        best_train_acc = max(best_train_acc, train_stats['acc'])
-        best_train_f1 = max(best_train_f1, train_stats['f1'])
-        best_test_acc = max(best_test_acc, test_stats['acc'])
-        best_test_f1 = max(best_test_f1, test_stats['f1'])
+        best_train_acc, best_train_f1, best_test_acc, best_test_f1 = np.maximum(
+            (best_train_acc, best_train_f1, best_test_acc, best_test_f1),
+            (train_stats['acc'], train_stats['f1'], test_stats['acc'], test_stats['f1'])
+        )
         writer.add_scalar('train/loss', train_stats['loss'], epoch)
         writer.add_scalar('train/acc', train_stats['acc'], epoch)
         writer.add_scalar('train/f1', train_stats['f1'], epoch)
@@ -145,7 +142,8 @@ def main(config: SketchModelConfig):
     if sct_key:
         title = f'{config.task_name} finished'
         content = f'Training {config.task_name} finished, total time:{total_time_str}, best test acc:{best_test_acc}, best test f1:{best_test_f1}, best train acc:{best_train_acc}, best train f1:{best_train_f1}'
-        res = requests.get(f"https://sctapi.ftqq.com/{sct_key}.send?title={urllib.parse.quote_plus(title)}&desp={urllib.parse.quote_plus(content)}")
+        res = requests.get(
+            f"https://sctapi.ftqq.com/{sct_key}.send?title={urllib.parse.quote_plus(title)}&desp={urllib.parse.quote_plus(content)}")
         print(res.text)
 
 
@@ -170,7 +168,7 @@ def train_one_epoch(
         window_size=1, fmt='{value:.6f}'))
     metric_logger.add_meter('r2', utils.SmoothedValue(
         window_size=1, fmt='{value:.6f}'))
-    header = f'{config.task_name} Epoch: [{epoch}]'
+    header = f'Task:{config.task_name} Epoch: [{epoch}]'
     print_freq = 10
 
     for (batch_img,
@@ -233,7 +231,7 @@ def evaluate(
         window_size=1, fmt='{value:.6f}'))
     metric_logger.add_meter('r2', utils.SmoothedValue(
         window_size=1, fmt='{value:.6f}'))
-    header = f'{config.task_name} Test:'
+    header = f'Task:{config.task_name} Test:'
     print_freq = 10
 
     for (batch_img,
