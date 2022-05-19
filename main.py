@@ -4,23 +4,27 @@ import math
 import random
 import sys
 import time
+import os
 from pathlib import Path
 
 import numpy as np
+
 import torch
-from torch.utils.data import DataLoader
+from torch import nn
+from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, BatchSampler
 from torch.utils.tensorboard import SummaryWriter
 from transformers import AutoTokenizer, PreTrainedTokenizer
 
-from sketch_model.configs import SketchModelConfig, config_from_arg
+from sketch_model.configs import SketchModelConfig, config_with_arg
 from sketch_model.datasets import build_dataset
 from sketch_model.model import build
 from sketch_model.utils import misc as utils, accuracy, f1score
 
 
 def main(config: SketchModelConfig):
+    if config.device == 'cuda' and not torch.cuda.is_available():
+        config.device = 'cpu'
     device = torch.device(config.device)
-
     # fix the seed for reproducibility
     seed = config.seed + utils.get_rank()
     torch.manual_seed(seed)
@@ -28,7 +32,8 @@ def main(config: SketchModelConfig):
     random.seed(seed)
 
     print("Loading Tokenizer...")
-    tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(config.tokenizer_name)
+    tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(
+        config.tokenizer_name)
     tokenizer.model_max_length = config.max_name_length
     config.vocab_size = tokenizer.vocab_size
     config.pad_token_id = tokenizer.pad_token_id
@@ -36,7 +41,8 @@ def main(config: SketchModelConfig):
     model.to(device)
 
     param_dicts = [
-        {"params": [p for n, p in model.named_parameters() if "backbone" not in n and p.requires_grad]},
+        {"params": [p for n, p in model.named_parameters(
+        ) if "backbone" not in n and p.requires_grad]},
     ]
     optimizer = torch.optim.AdamW(param_dicts, lr=config.lr,
                                   weight_decay=config.weight_decay)
@@ -45,17 +51,15 @@ def main(config: SketchModelConfig):
     print("Loading Dataset...")
     dataset_train = build_dataset(config.train_index_json, tokenizer)
     dataset_val = build_dataset(config.test_index_json, tokenizer)
-    sampler_train = torch.utils.data.RandomSampler(dataset_train)
-    sampler_val = torch.utils.data.SequentialSampler(dataset_val)
-    batch_sampler_train = torch.utils.data.BatchSampler(
+    sampler_train = RandomSampler(dataset_train)
+    sampler_val = SequentialSampler(dataset_val)
+    batch_sampler_train = BatchSampler(
         sampler_train, config.batch_size, drop_last=True)
     data_loader_train = DataLoader(dataset_train, batch_sampler=batch_sampler_train,
                                    collate_fn=utils.collate_fn, num_workers=config.num_workers)
     data_loader_val = DataLoader(dataset_val, config.batch_size, sampler=sampler_val,
                                  drop_last=False, collate_fn=utils.collate_fn, num_workers=config.num_workers)
 
-    output_dir = Path(config.output_dir)
-    output_dir.mkdir(exist_ok=True)
     if config.resume:
         checkpoint = torch.load(config.resume, map_location='cpu')
         model.load_state_dict(checkpoint['model'])
@@ -63,26 +67,36 @@ def main(config: SketchModelConfig):
         lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
         config.start_epoch = checkpoint['epoch'] + 1
 
-    n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    n_parameters = sum(p.numel()
+                       for p in model.parameters() if p.requires_grad)
     print('number of params:', n_parameters)
 
     if config.evaluate:
         test_stats = evaluate(model, criterion, data_loader_val, device)
         return
 
+    output_dir = Path(config.output_dir) / config.task_name
+    os.makedirs(output_dir, exist_ok=True)
+    checkpoint_dir = output_dir / 'checkpoints'
+    os.makedirs(checkpoint_dir, exist_ok=True)
+    tensorboard_dir = output_dir / 'tensorboard'
+    os.makedirs(tensorboard_dir, exist_ok=True)
+    config.save(output_dir / 'config.json')
+
     print("Start training")
+    print("main pid", os.getpid())
     start_time = time.time()
-    run_dir = output_dir / f'{time.strftime("%d-%H%M", time.localtime())}'
+    writer = SummaryWriter(str(tensorboard_dir))
     for epoch in range(config.start_epoch, config.epochs):
-        writer = SummaryWriter(str(run_dir))
         train_stats = train_one_epoch(config, model, criterion, data_loader_train, optimizer, device, epoch,
                                       config.clip_max_norm)
         lr_scheduler.step()
         if config.output_dir:
-            checkpoint_paths = [output_dir / 'checkpoint.pth']
+            checkpoint_paths = [checkpoint_dir / 'latest.pth']
             # extra checkpoint before LR drop and every 10 epochs
             if (epoch + 1) % config.lr_drop == 0 or (epoch + 1) % 100 == 0:
-                checkpoint_paths.append(output_dir / f'checkpoint{epoch:04}.pth')
+                checkpoint_paths.append(
+                    checkpoint_dir / f'checkpoint{epoch:04}.pth')
             for checkpoint_path in checkpoint_paths:
                 utils.save_on_master({
                     'model': model.state_dict(),
@@ -100,7 +114,8 @@ def main(config: SketchModelConfig):
         writer.add_scalar('train/acc', train_stats['acc'], epoch)
         writer.add_scalar('test/loss', test_stats['loss'], epoch)
         writer.add_scalar('test/acc', test_stats['acc'], epoch)
-        writer.add_scalar("learning_rate", optimizer.param_groups[0]['lr'], epoch)
+        writer.add_scalar(
+            "learning_rate", optimizer.param_groups[0]['lr'], epoch)
 
         if config.output_dir and utils.is_main_process():
             with (output_dir / "log.txt").open("a") as f:
@@ -113,9 +128,9 @@ def main(config: SketchModelConfig):
 
 def train_one_epoch(
         config: SketchModelConfig,
-        model: torch.nn.Module,
-        criterion: torch.nn.Module,
-        dataloader: torch.utils.data.DataLoader,
+        model: nn.Module,
+        criterion: nn.Module,
+        dataloader: DataLoader[str],
         optimizer: torch.optim.Optimizer,
         device: torch.device,
         epoch: int,
@@ -124,11 +139,15 @@ def train_one_epoch(
     model.train()
     criterion.train()
     metric_logger = utils.MetricLogger(delimiter="  ")
-    metric_logger.add_meter('lr', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
-    metric_logger.add_meter('acc', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
-    metric_logger.add_meter('f1', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
+    metric_logger.add_meter('lr', utils.SmoothedValue(
+        window_size=1, fmt='{value:.6f}'))
+    metric_logger.add_meter('acc', utils.SmoothedValue(
+        window_size=1, fmt='{value:.6f}'))
+    metric_logger.add_meter('f1', utils.SmoothedValue(
+        window_size=1, fmt='{value:.6f}'))
     header = 'Epoch: [{}]'.format(epoch)
     print_freq = 10
+    print("train_one_epoch pid", os.getpid())
 
     for (batch_img,
          batch_name,
@@ -141,7 +160,8 @@ def train_one_epoch(
         batch_color = batch_color.to(device)
         batch_class = batch_class.to(device)
         targets = [t.to(device) for t in targets]
-        outputs = model(batch_img, batch_name, batch_bbox, batch_color, batch_class)
+        outputs = model(batch_img, batch_name, batch_bbox,
+                        batch_color, batch_class)
         batch_ce_loss = torch.tensor(0.0, device=device)
         acc = 0
         f1 = 0
@@ -174,13 +194,20 @@ def train_one_epoch(
 
 
 @torch.no_grad()
-def evaluate(model, criterion, dataloader, device):
+def evaluate(
+    model: nn.Module,
+    criterion: nn.modules.loss._Loss,
+    dataloader: DataLoader,
+    device: torch.device,
+):
     model.eval()
     criterion.eval()
 
     metric_logger = utils.MetricLogger(delimiter="  ")
-    metric_logger.add_meter('acc', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
-    metric_logger.add_meter('f1', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
+    metric_logger.add_meter('acc', utils.SmoothedValue(
+        window_size=1, fmt='{value:.6f}'))
+    metric_logger.add_meter('f1', utils.SmoothedValue(
+        window_size=1, fmt='{value:.6f}'))
     header = 'Test:'
     print_freq = 10
 
@@ -196,7 +223,8 @@ def evaluate(model, criterion, dataloader, device):
         batch_class = batch_class.to(device)
         targets = [t.to(device) for t in targets]
 
-        outputs = model(batch_img, batch_name, batch_bbox, batch_color, batch_class)
+        outputs = model(batch_img, batch_name, batch_bbox,
+                        batch_color, batch_class)
         batch_ce_loss = torch.tensor(0.0, device=device)
         acc = 0
         f1 = 0
@@ -222,4 +250,4 @@ def evaluate(model, criterion, dataloader, device):
 
 
 if __name__ == '__main__':
-    main(config_from_arg())
+    main(config_with_arg())

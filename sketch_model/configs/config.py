@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from sketch_model.datasets.dataset import LAYER_CLASS_MAP
-
+from fastclasses_json import dataclass_json, JSONMixin
 
 class Aggregation(enum.Enum):
     CONCAT = 0
@@ -33,24 +33,26 @@ class TransformerConfig:
     dropout: float = 0.1
     nheads: int = 8
     pre_norm: bool = False
+    use_mask: bool = True
 
 
 @dataclass
 class DatasetConfig:
-    train_index_json: str = 'C:\\nozomisharediskc\\sketch_transformer_dataset\\index_train.json'
-    test_index_json: str = 'C:\\nozomisharediskc\\sketch_transformer_dataset\\index_test.json'
+    train_index_json: str = '/home/borealin/sketch_transformer_dataset/index_train.json'
+    test_index_json: str = '/home/borealin/sketch_transformer_dataset/index_test.json'
 
 
 @dataclass
 class SaveConfig:
+    task_name: str = 'sketch_transformer'
     output_dir: str = './work_dir'
     resume: Optional[str] = None
 
 
 @dataclass
 class DeviceConfig:
-    device: str = 'cpu'
-    num_workers: int = 2
+    device: str = 'cuda'
+    num_workers: int = 4
 
 
 @dataclass
@@ -74,8 +76,10 @@ class DefaultConfig:
     clip_max_norm: float = 0.1
 
 
+@dataclass_json
 @dataclass
 class SketchModelConfig(
+    JSONMixin,
     TransformerConfig,
     DatasetConfig,
     SaveConfig,
@@ -102,3 +106,6 @@ class SketchModelConfig(
 
     vocab_size: int = 21128
     pad_token_id: int = 0
+
+    def save(self, path: str):
+        open(path, 'w').write(self.to_json())
