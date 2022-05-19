@@ -192,7 +192,7 @@ class LayerStructureEmbedding(nn.Module):
         else:
             raise ValueError('Unknown pos pattern')
         freqs = self.freq_fc(boxes)
-        features = torch.concat([torch.cos(freqs), torch.sin(freqs)], dim=-1)
+        features = torch.cat([torch.cos(freqs), torch.sin(freqs)], dim=-1)
         coord_embeds: torch.Tensor = self.coord_embeder(features)
         coord_embeds = torch.reshape(coord_embeds, coord_embeds.shape[:2] + (-1,))
         return coord_embeds
