@@ -16,6 +16,7 @@ def config_with_arg() -> SketchModelConfig:
     argparser.add_argument('--workers', type=str, default=None)
     argparser.add_argument('--aggregation', type=str, default=None)
     argparser.add_argument('--pos_pattern', type=str, default=None)
+    argparser.add_argument('--name_sum', type=str, default=None)
     argparser.add_argument('--noimage', dest="use_image", action="store_false", default=True)
     argparser.add_argument('--noname', dest="use_name",
                            action="store_false", default=True)
@@ -46,6 +47,13 @@ def config_with_arg() -> SketchModelConfig:
             config.pos_pattern = PosPattern.TWO
         elif args.pos_pattern == '4/1':
             config.pos_pattern = PosPattern.FOUR
+    if args.name_sum is not None:
+        if args.name_sum == 'sum':
+            config.sentence_method = SentenceMethod.SUM
+        elif args.name_sum == 'mean':
+            config.sentence_method = SentenceMethod.MEAN
+        elif args.name_sum == 'max':
+            config.sentence_method = SentenceMethod.MAX
     if args.aggregation is not None:
         if args.aggregation == "sum":
             config.aggregation = Aggregation.SUM
