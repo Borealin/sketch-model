@@ -1,15 +1,19 @@
 import numpy as np
+import torch
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import f1_score, r2_score
 
 
 def accuracy(scores, targets):
-    S = targets.cpu().numpy()
-    C = scores.cpu().numpy()
+    if isinstance(scores, torch.Tensor):
+        scores = scores.cpu().numpy()
+    if isinstance(targets, torch.Tensor):
+        targets = targets.cpu().numpy()
+    S = targets
+    C = scores
     S, C = S.flatten(), C.flatten()
     CM = confusion_matrix(S, C).astype(np.float32)
     nb_classes = CM.shape[0]
-    targets = targets.cpu().detach().numpy()
     nb_non_empty_classes = 0
     pr_classes = np.zeros(nb_classes)
     for r in range(nb_classes):

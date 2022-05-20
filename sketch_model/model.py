@@ -1,6 +1,8 @@
+from typing import Tuple
+
 import torch
 from torch import nn
-from transformers import PreTrainedTokenizer
+from torch.nn.modules.loss import _Loss as Loss
 
 from sketch_model.configs import SketchModelConfig
 from sketch_model.layers import LayerStructureEmbedding, build_transformer, SketchTransformer
@@ -40,7 +42,7 @@ class SketchLayerClassifierModel(nn.Module):
         return class_embed.softmax(dim=-1)
 
 
-def build(config: SketchModelConfig):
+def build(config: SketchModelConfig) -> Tuple[SketchLayerClassifierModel, Loss]:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     transformer = build_transformer(config)
     model = SketchLayerClassifierModel(
