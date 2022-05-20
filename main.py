@@ -21,7 +21,7 @@ from sketch_model.configs import SketchModelConfig, config_with_arg
 from sketch_model.datasets import build_dataset
 from sketch_model.model import build
 from sketch_model.utils import misc as utils, accuracy, f1score, r2score
-
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 def main(config: SketchModelConfig):
     if config.device == 'cuda' and not torch.cuda.is_available():
