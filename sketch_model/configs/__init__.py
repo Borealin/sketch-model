@@ -29,6 +29,8 @@ def config_with_arg() -> SketchModelConfig:
                            action="store_false", default=True)
     argparser.add_argument('--evaluate', dest="evaluate",
                            action="store_true", default=False)
+    argparser.add_argument('--lazy', dest="lazy",
+                           action="store_true", default=False)
     args = argparser.parse_args()
     config = default_config()
     if args.train is not None:
@@ -70,4 +72,5 @@ def config_with_arg() -> SketchModelConfig:
     config.use_class = args.use_class
     config.use_mask = args.use_mask
     config.evaluate = args.evaluate
+    config.lazy_load = args.lazy
     return config

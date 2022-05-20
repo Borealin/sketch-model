@@ -97,6 +97,8 @@ class ModelConfig(TransformerConfig, LRConfig):
     vocab_size: int = 21128
     pad_token_id: int = 0
 
+    lazy_load: bool = False
+
 
 @dataclass_json
 @dataclass

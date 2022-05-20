@@ -101,7 +101,7 @@ def main(config: SketchModelConfig):
         return
 
     print("Loading Train Dataset...")
-    dataset_train = build_dataset(config.train_index_json, tokenizer)
+    dataset_train = build_dataset(config.train_index_json, Path(config.test_index_json).parent.__str__(), tokenizer)
     sampler_train = RandomSampler(dataset_train)
     batch_sampler_train = BatchSampler(
         sampler_train, config.batch_size, drop_last=True)
