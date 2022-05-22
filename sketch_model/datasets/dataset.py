@@ -36,28 +36,35 @@ class SketchDataset(Dataset):
             T.ToTensor(),
             T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ])
-        self.artboard_detail: List[Dict[str, Any]] = []
+        # self.artboard_detail: List[Dict[str, Any]] = []
         self.data = self.load_data(tokenizer)
-
+    
     def __len__(self):
         return len(self.data)
 
     def __getitem__(self, idx):
-        artboard = self.index_json[idx]
-        json_data = self.artboard_detail[idx]
-        single_layer_size = (json_data['layer_width'], json_data['layer_height'])
-        asset_image_path = str(self.data_folder / artboard['layerassets'])
-        asset_image_rgb = Image.open(asset_image_path).convert('RGB')
-        asset_image_tensor = self.img_transform(asset_image_rgb)
-        images = torch.stack(asset_image_tensor.split(single_layer_size[1], dim=1))
-        return (images, *self.data[idx])
+        #     artboard = self.index_json[idx]
+        #     json_data = self.artboard_detail[idx]
+        #     single_layer_size = (json_data['layer_width'], json_data['layer_height'])
+        #     asset_image_path = str(self.data_folder / artboard['layerassets'])
+        #     asset_image_rgb = Image.open(asset_image_path).convert('RGB')
+        #     asset_image_tensor = self.img_transform(asset_image_rgb)
+        #     images = torch.stack(asset_image_tensor.split(single_layer_size[1], dim=1))
+        #     return (images, *self.data[idx])
+            # load all data to memory if it has enough space
+        return self.data[idx]
 
     def load_data(self, tokenizer: PreTrainedTokenizerBase):
         data = []
         for artboard in tqdm(self.index_json, desc='Loading Artboards'):
             json_path = self.data_folder / artboard['json']
             json_data = json.load(open(json_path, 'r'))
-            self.artboard_detail.append(json_data)
+            single_layer_size = (json_data['layer_width'], json_data['layer_height'])
+            asset_image_path = str(self.data_folder / artboard['layerassets'])
+            asset_image_rgb = Image.open(asset_image_path).convert('RGB')
+            asset_image_tensor = self.img_transform(asset_image_rgb)
+            images = torch.stack(asset_image_tensor.split(single_layer_size[1], dim=1))
+            # self.artboard_detail.append(json_data)
             names = []
             bboxes = []
             colors = []
@@ -83,7 +90,7 @@ class SketchDataset(Dataset):
             colors = torch.as_tensor(colors, dtype=torch.float32)
             classes = torch.as_tensor(classes, dtype=torch.int64)
             labels = torch.as_tensor(labels, dtype=torch.int64)
-            data.append((names, bboxes, colors, classes, labels))
+            data.append((images, names, bboxes, colors, classes, labels))
         return data
 
 

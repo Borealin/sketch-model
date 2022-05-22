@@ -30,7 +30,7 @@ class TransformerConfig:
     enc_layers: int = 6
     dim_feedforward: int = 2048
     hidden_dim: int = 256
-    dropout: float = 0.1
+    dropout: float = 0.25
     nheads: int = 8
     pre_norm: bool = True
     use_mask: bool = True
@@ -64,7 +64,7 @@ class InitConfig:
 
 @dataclass
 class LRConfig:
-    lr: float = 1e-4
+    lr: float = 1e-3
     lr_drop: int = 100
 
 
@@ -72,7 +72,7 @@ class LRConfig:
 class DefaultConfig:
     batch_size: int = 8
     weight_decay: float = 1e-4
-    epochs: int = 300
+    epochs: int = 400
     clip_max_norm: float = 0.1
 
 
@@ -97,7 +97,7 @@ class SketchModelConfig(
     pos_freq: int = 64
     pos_pattern: PosPattern = PosPattern.ONE
     sentence_method: SentenceMethod = SentenceMethod.SUM
-    aggregation: Aggregation = Aggregation.CONCAT
+    aggregation: Aggregation = Aggregation.SUM
 
     use_image: bool = True
     use_name: bool = True

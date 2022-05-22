@@ -14,6 +14,7 @@ def config_with_arg() -> SketchModelConfig:
     argparser.add_argument('--output', type=str, default=None)
     argparser.add_argument('--task', type=str, default=None)
     argparser.add_argument('--workers', type=str, default=None)
+    argparser.add_argument('--batch_size', type=int, default=8)
     argparser.add_argument('--aggregation', type=str, default=None)
     argparser.add_argument('--pos_pattern', type=str, default=None)
     argparser.add_argument('--name_sum', type=str, default=None)
@@ -28,6 +29,8 @@ def config_with_arg() -> SketchModelConfig:
                            action="store_false", default=True)
     args = argparser.parse_args()
     config = default_config()
+    if args.batch_size is not None:
+        config.batch_size = args.batch_size
     if args.train is not None:
         config.train_index_json = args.train
     if args.test is not None:
