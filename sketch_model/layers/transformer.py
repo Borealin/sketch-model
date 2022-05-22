@@ -26,6 +26,7 @@ class SketchTransformer(nn.Module):
             dropout=0.1,
             normalize_before=False,
             batch_first=True,
+            add_mlp=False,
     ):
         super().__init__()
 
@@ -38,7 +39,11 @@ class SketchTransformer(nn.Module):
 
         self.d_model = d_model
         self.nhead = nhead
-        self.mlp = Mlp(d_model, dropout=dropout)
+        self.add_mlp = add_mlp
+        if add_mlp:
+            self.mlp = Mlp(d_model, dropout=dropout)
+        else:
+            self.mlp = None
 
     def _reset_parameters(self):
         for p in self.parameters():
@@ -47,7 +52,9 @@ class SketchTransformer(nn.Module):
 
     def forward(self, src, mask, pos_embed):
         memory = self.encoder(src, src_key_padding_mask=mask, pos=pos_embed)
-        return self.mlp(memory)
+        if self.add_mlp:
+            memory = self.mlp(memory)
+        return memory
 
 
 class Mlp(nn.Module):

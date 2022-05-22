@@ -43,7 +43,7 @@ class TransformerConfig:
 class DatasetConfig:
     train_index_json: str = '/home/borealin/sketch_transformer_dataset/index_train.json'
     test_index_json: str = '/home/borealin/sketch_transformer_dataset/index_test.json'
-
+    lazy_load: bool = False
 
 @dataclass
 class SaveConfig:
@@ -97,7 +97,7 @@ class ModelConfig(TransformerConfig, LRConfig):
     vocab_size: int = 21128
     pad_token_id: int = 0
 
-    lazy_load: bool = False
+    add_mlp: bool = False
 
 
 @dataclass_json
