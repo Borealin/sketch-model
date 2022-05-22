@@ -38,6 +38,7 @@ class SketchTransformer(nn.Module):
 
         self.d_model = d_model
         self.nhead = nhead
+        self.mlp = Mlp(d_model, dropout=dropout)
 
     def _reset_parameters(self):
         for p in self.parameters():
@@ -46,7 +47,23 @@ class SketchTransformer(nn.Module):
 
     def forward(self, src, mask, pos_embed):
         memory = self.encoder(src, src_key_padding_mask=mask, pos=pos_embed)
-        return memory
+        return self.mlp(memory)
+
+
+class Mlp(nn.Module):
+    def __init__(self, embed_dim, mlp_ratio=4.0, dropout=0.):
+        super().__init__()
+        self.fc1 = nn.Linear(embed_dim, int(embed_dim * mlp_ratio))
+        self.fc2 = nn.Linear(int(embed_dim * mlp_ratio), embed_dim)
+        self.act = nn.GELU()
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x):
+        x = self.fc1(x)
+        x = self.act(x)
+        x = self.dropout(x)
+        x = self.fc2(x)
+        return x
 
 
 class TransformerEncoder(nn.Module):
