@@ -31,7 +31,7 @@ def config_with_arg() -> SketchModelConfig:
                            action="store_true", default=False)
     argparser.add_argument('--lazy', dest="lazy",
                            action="store_true", default=False)
-    argparser.add_argument('--mlp', dest="debug",
+    argparser.add_argument('--mlp', dest="mlp",
                            action="store_true", default=False)
     args = argparser.parse_args()
     config = default_config()
