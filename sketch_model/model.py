@@ -15,8 +15,8 @@ class SketchLayerClassifierModel(nn.Module):
     ):
         super().__init__()
         self.config = config
-        self.transformer: SketchTransformer = transformer
         self.hidden_dim = transformer.d_model
+        self.transformer: SketchTransformer = transformer
         self.structure_embed = LayerStructureEmbedding(
             config,
         )
