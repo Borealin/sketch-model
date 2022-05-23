@@ -39,7 +39,7 @@ class SketchDataset(Dataset):
         self.artboard_detail: List[Dict[str, Any]] = []
         self.lazy = lazy
         self.data = self.load_data(tokenizer)
-
+    
     def __len__(self):
         return len(self.data)
 

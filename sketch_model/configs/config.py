@@ -33,7 +33,7 @@ class TransformerConfig:
     enc_layers: int = 6
     dim_feedforward: int = 2048
     hidden_dim: int = 256
-    dropout: float = 0.1
+    dropout: float = 0.25
     nheads: int = 8
     pre_norm: bool = True
     use_mask: bool = True
@@ -43,7 +43,7 @@ class TransformerConfig:
 class DatasetConfig:
     train_index_json: str = '/home/borealin/sketch_transformer_dataset/index_train.json'
     test_index_json: str = '/home/borealin/sketch_transformer_dataset/index_test.json'
-
+    lazy_load: bool = False
 
 @dataclass
 class SaveConfig:
@@ -55,7 +55,7 @@ class SaveConfig:
 @dataclass
 class DeviceConfig:
     device: str = 'cuda'
-    num_workers: int = 4
+    num_workers: int = 8
 
 
 @dataclass
@@ -69,7 +69,7 @@ class InitConfig:
 
 @dataclass
 class LRConfig:
-    lr: float = 1e-4
+    lr: float = 1e-3
     lr_drop: int = 100
 
 
@@ -87,7 +87,7 @@ class ModelConfig(TransformerConfig, LRConfig):
     pos_freq: int = 64
     pos_pattern: PosPattern = PosPattern.ONE
     sentence_method: SentenceMethod = SentenceMethod.SUM
-    aggregation: Aggregation = Aggregation.CONCAT
+    aggregation: Aggregation = Aggregation.SUM
 
     use_image: bool = True
     use_name: bool = True
@@ -97,7 +97,7 @@ class ModelConfig(TransformerConfig, LRConfig):
     vocab_size: int = 21128
     pad_token_id: int = 0
 
-    lazy_load: bool = False
+    add_mlp: bool = False
 
 
 @dataclass_json

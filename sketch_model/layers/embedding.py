@@ -1,5 +1,5 @@
 from typing import Tuple, Optional
-
+from torchvision import models
 import torch
 from torch import nn
 
@@ -50,17 +50,23 @@ class ImageEmbedding(nn.Module):
         self.patch_size = patch_size
         self.image_size = (image_size, image_size)
         self.num_channels = num_channels
-        self.projection = nn.Sequential(
-            nn.Conv2d(num_channels, embedding_dim, kernel_size=patch_size, stride=patch_size),
-            nn.ReLU(),
-            nn.Flatten(2),
-            nn.Linear((image_size // self.patch_size) ** 2, 1),
-        )
-
+        # self.projection = nn.Sequential(
+        #     nn.Conv2d(num_channels, embedding_dim, kernel_size=patch_size, stride=patch_size),
+        #     nn.ReLU(),
+        #     nn.Flatten(2),
+        #     nn.Linear((image_size // self.patch_size) ** 2, 1),
+        # )
+        self.feature_extractor = models.resnet50(pretrained=True)
+        num_ftrs = self.feature_extractor.fc.in_features
+        self.feature_extractor.fc = nn.Linear(num_ftrs, self.embedding_dim)
+        self.dropout = nn.Dropout(0.25)
     def forward(self, images: torch.Tensor) -> torch.Tensor:
         # batch_size, seq_len, channels, height, width = images.shape
+        
         flat_images = images.view(-1, self.num_channels, *self.image_size)
-        features = self.projection(flat_images)
+        features = self.feature_extractor(flat_images)
+        features = self.dropout(features)
+        # features = self.projection(flat_images)
         expand_features = features.view(*images.shape[:2], self.embedding_dim)
         return expand_features
 

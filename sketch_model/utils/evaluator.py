@@ -3,6 +3,10 @@ import torch
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import f1_score, r2_score
 
+def accuracy_simple(preds, targets):
+    preds = preds.cpu().detach()
+    targets = targets.cpu().detach()
+    return (preds == targets).sum().item() / preds.size(0)
 
 def accuracy(scores, targets):
     if isinstance(scores, torch.Tensor):

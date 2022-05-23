@@ -24,6 +24,9 @@ from transformers import AutoTokenizer, PreTrainedTokenizer
 
 from sketch_model.configs import SketchModelConfig, config_with_arg, ModelConfig
 from sketch_model.datasets import build_dataset
+from sketch_model.model import build
+from sketch_model.utils import misc as utils, accuracy, f1score, r2score, accuracy_simple
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 from sketch_model.model import build, SketchLayerClassifierModel
 from sketch_model.utils import misc as utils, accuracy, f1score, r2score
 
@@ -225,7 +228,7 @@ def train_one_epoch(
             ce_loss = criterion(packed, targets[i])
             batch_ce_loss += ce_loss
             pred = packed.max(-1)[1]
-            acc += accuracy(pred, targets[i])
+            acc += accuracy_simple(pred, targets[i])
             f1 += f1score(pred, targets[i])
             r2 += r2score(pred, targets[i])
         acc, f1, r2 = numpy.array([acc, f1, r2]) / len(targets)
@@ -289,7 +292,7 @@ def evaluate(
             ce_loss = criterion(packed, targets[i])
             batch_ce_loss += ce_loss
             pred = packed.max(-1)[1]
-            acc += accuracy(pred, targets[i])
+            acc += accuracy_simple(pred, targets[i])
             f1 += f1score(pred, targets[i])
             r2 += r2score(pred, targets[i])
         acc, f1, r2 = numpy.array([acc, f1, r2]) / len(targets)
