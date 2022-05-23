@@ -18,6 +18,7 @@ def config_with_arg() -> SketchModelConfig:
     argparser.add_argument('--aggregation', type=str, default=None)
     argparser.add_argument('--pos_pattern', type=str, default=None)
     argparser.add_argument('--name_sum', type=str, default=None)
+    argparser.add_argument('--resume', type=str, default=None)
     argparser.add_argument('--noimage', dest="use_image", action="store_false", default=True)
     argparser.add_argument('--noname', dest="use_name",
                            action="store_false", default=True)
@@ -27,6 +28,12 @@ def config_with_arg() -> SketchModelConfig:
                            action="store_false", default=True)
     argparser.add_argument('--nomask', dest="use_mask",
                            action="store_false", default=True)
+    argparser.add_argument('--evaluate', dest="evaluate",
+                           action="store_true", default=False)
+    argparser.add_argument('--lazy', dest="lazy",
+                           action="store_true", default=False)
+    argparser.add_argument('--mlp', dest="mlp",
+                           action="store_true", default=False)
     args = argparser.parse_args()
     config = default_config()
     if args.batch_size is not None:
@@ -43,6 +50,8 @@ def config_with_arg() -> SketchModelConfig:
         config.task_name = args.task
     if args.workers is not None:
         config.num_workers = int(args.workers)
+    if args.resume is not None:
+        config.resume = args.resume
     if args.pos_pattern is not None:
         if args.pos_pattern == '1/4':
             config.pos_pattern = PosPattern.ONE
@@ -67,4 +76,7 @@ def config_with_arg() -> SketchModelConfig:
     config.use_color = args.use_color
     config.use_class = args.use_class
     config.use_mask = args.use_mask
+    config.evaluate = args.evaluate
+    config.lazy_load = args.lazy
+    config.add_mlp = args.mlp
     return config

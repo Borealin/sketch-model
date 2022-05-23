@@ -6,34 +6,64 @@ import random
 import sys
 import time
 import urllib.parse
+from dataclasses import fields
 from pathlib import Path
+from typing import Dict, Any, Tuple
 
 import numpy
 import numpy as np
 import requests
 import torch
 from torch import nn
+from torch.nn.modules.loss import _Loss as Loss
+from torch.optim import Optimizer
+from torch.optim.lr_scheduler import _LRScheduler
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler, BatchSampler
 from torch.utils.tensorboard import SummaryWriter
 from transformers import AutoTokenizer, PreTrainedTokenizer
 
-from sketch_model.configs import SketchModelConfig, config_with_arg
+from sketch_model.configs import SketchModelConfig, config_with_arg, ModelConfig
 from sketch_model.datasets import build_dataset
 from sketch_model.model import build
 from sketch_model.utils import misc as utils, accuracy, f1score, r2score, accuracy_simple
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
+from sketch_model.model import build, SketchLayerClassifierModel
+from sketch_model.utils import misc as utils, accuracy, f1score, r2score
 
-def main(config: SketchModelConfig):
+
+def init_device(
+        config: SketchModelConfig
+) -> torch.device:
     if config.device == 'cuda' and not torch.cuda.is_available():
         config.device = 'cpu'
     device = torch.device(config.device)
+    return device
+
+
+def init_config(
+        config: SketchModelConfig
+) -> Tuple[SketchModelConfig, Dict[str, Any]]:
     # fix the seed for reproducibility
     seed = config.seed + utils.get_rank()
     torch.manual_seed(seed)
     np.random.seed(seed)
     random.seed(seed)
 
-    print("Loading Tokenizer...")
+    checkpoint = None
+    if config.resume:
+        checkpoint = torch.load(config.resume, map_location='cpu')
+        saved_config: SketchModelConfig = checkpoint['config']
+        config.start_epoch = checkpoint['epoch'] + 1
+        for field in fields(ModelConfig):
+            config.__setattr__(field.name, saved_config.__getattribute__(field.name))
+    return config, checkpoint
+
+
+def init_model(
+        config: SketchModelConfig,
+        checkpoint: Dict[str, Any],
+        device: torch.device
+) -> Tuple[PreTrainedTokenizer, SketchLayerClassifierModel, Loss, Optimizer, _LRScheduler]:
     tokenizer: PreTrainedTokenizer = AutoTokenizer.from_pretrained(
         config.tokenizer_name)
     tokenizer.model_max_length = config.max_name_length
@@ -50,32 +80,39 @@ def main(config: SketchModelConfig):
                                   weight_decay=config.weight_decay)
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, config.lr_drop)
 
-    print("Loading Dataset...")
-    dataset_train = build_dataset(config.train_index_json, tokenizer)
-    dataset_val = build_dataset(config.test_index_json, tokenizer)
-    sampler_train = RandomSampler(dataset_train)
+    if checkpoint is not None:
+        model.load_state_dict(checkpoint['model'])
+        optimizer.load_state_dict(checkpoint['optimizer'])
+        lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
+    return (tokenizer, model, criterion, optimizer, lr_scheduler)
+
+
+def main(config: SketchModelConfig):
+    print("Loading Config...")
+    device = init_device(config)
+    config, checkpoint = init_config(config)
+    print("Loading Model...")
+    tokenizer, model, criterion, optimizer, lr_scheduler = init_model(config, checkpoint, device)
+    print("Loading Test Dataset...")
+    dataset_val = build_dataset(config.test_index_json, Path(config.test_index_json).parent.__str__(), tokenizer)
     sampler_val = SequentialSampler(dataset_val)
+    data_loader_val = DataLoader(dataset_val, config.batch_size, sampler=sampler_val,
+                                 drop_last=False, collate_fn=utils.collate_fn, num_workers=config.num_workers)
+    if config.evaluate:
+        test_stats = evaluate(config, model, criterion, data_loader_val, device)
+        print(test_stats)
+        return
+
+    print("Loading Train Dataset...")
+    dataset_train = build_dataset(config.train_index_json, Path(config.test_index_json).parent.__str__(), tokenizer)
+    sampler_train = RandomSampler(dataset_train)
     batch_sampler_train = BatchSampler(
         sampler_train, config.batch_size, drop_last=True)
     data_loader_train = DataLoader(dataset_train, batch_sampler=batch_sampler_train,
                                    collate_fn=utils.collate_fn, num_workers=config.num_workers)
-    data_loader_val = DataLoader(dataset_val, config.batch_size, sampler=sampler_val,
-                                 drop_last=False, collate_fn=utils.collate_fn, num_workers=config.num_workers)
 
-    if config.resume:
-        checkpoint = torch.load(config.resume, map_location='cpu')
-        model.load_state_dict(checkpoint['model'])
-        optimizer.load_state_dict(checkpoint['optimizer'])
-        lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
-        config.start_epoch = checkpoint['epoch'] + 1
-
-    n_parameters = sum(p.numel()
-                       for p in model.parameters() if p.requires_grad)
+    n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print('number of params:', n_parameters)
-
-    if config.evaluate:
-        test_stats = evaluate(config, model, criterion, data_loader_val, device)
-        return
 
     output_dir = Path(config.output_dir) / config.task_name
     os.makedirs(output_dir, exist_ok=True)

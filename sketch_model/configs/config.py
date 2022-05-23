@@ -1,9 +1,12 @@
 import enum
 from dataclasses import dataclass
+from os import PathLike
 from typing import Optional
 
-from sketch_model.datasets.dataset import LAYER_CLASS_MAP
 from fastclasses_json import dataclass_json, JSONMixin
+
+from sketch_model.datasets.dataset import LAYER_CLASS_MAP
+
 
 class Aggregation(enum.Enum):
     CONCAT = 0
@@ -40,7 +43,7 @@ class TransformerConfig:
 class DatasetConfig:
     train_index_json: str = '/home/borealin/sketch_transformer_dataset/index_train.json'
     test_index_json: str = '/home/borealin/sketch_transformer_dataset/index_test.json'
-
+    lazy_load: bool = False
 
 @dataclass
 class SaveConfig:
@@ -59,6 +62,8 @@ class DeviceConfig:
 class InitConfig:
     seed: int = 42
     start_epoch: int = 0
+    epochs: int = 300
+    batch_size: int = 8
     evaluate: bool = False
 
 
@@ -69,25 +74,10 @@ class LRConfig:
 
 
 @dataclass
-class DefaultConfig:
-    batch_size: int = 8
+class ModelConfig(TransformerConfig, LRConfig):
     weight_decay: float = 1e-4
-    epochs: int = 400
     clip_max_norm: float = 0.1
 
-
-@dataclass_json
-@dataclass
-class SketchModelConfig(
-    JSONMixin,
-    TransformerConfig,
-    DatasetConfig,
-    SaveConfig,
-    DeviceConfig,
-    InitConfig,
-    LRConfig,
-    DefaultConfig
-):
     tokenizer_name: str = 'bert-base-chinese'
     max_name_length: int = 32
     num_classes: int = 4
@@ -107,5 +97,19 @@ class SketchModelConfig(
     vocab_size: int = 21128
     pad_token_id: int = 0
 
-    def save(self, path: str):
+    add_mlp: bool = False
+
+
+@dataclass_json
+@dataclass
+class SketchModelConfig(
+    JSONMixin,
+    DatasetConfig,
+    SaveConfig,
+    DeviceConfig,
+    InitConfig,
+    ModelConfig
+):
+
+    def save(self, path: PathLike):
         open(path, 'w').write(self.to_json())
